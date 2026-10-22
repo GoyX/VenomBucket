@@ -19,8 +19,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: dev.venombucket.client
         FRAMEWORK_SEARCH_PATHS: "$(inherited) $(PLATFORM_DIR)/Developer/Library/Frameworks"
         OTHER_LDFLAGS:
-          - "-L../target/aarch64-apple-ios/release"
-          - "-lhorizon_client"
+          - "-force_load"
+          - "$(PROJECT_DIR)/../target/aarch64-apple-ios/release/libhorizon_client.a"
           - "-framework Metal"
           - "-framework UIKit"
           - "-framework QuartzCore"
