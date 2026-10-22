@@ -1,0 +1,32 @@
+name: Horizon
+options:
+  bundleIdPrefix: dev.venombucket
+  deploymentTarget:
+    iOS: "15.0"
+  xcodeVersion: "15.0"
+targets:
+  Horizon:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: Resources
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        INFOPLIST_FILE: Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: dev.venombucket.client
+        FRAMEWORK_SEARCH_PATHS: "$(inherited) $(PLATFORM_DIR)/Developer/Library/Frameworks"
+        OTHER_LDFLAGS:
+          - "-L../target/aarch64-apple-ios/release"
+          - "-l:libhorizon_client.a"
+          - "-framework Metal"
+          - "-framework UIKit"
+          - "-framework QuartzCore"
+          - "-framework CoreAudio"
+          - "-framework AudioToolbox"
+          - "-framework AVFoundation"
+          - "-framework CoreGraphics"
+          - "-framework Foundation"
+          - "-framework CoreFoundation"

@@ -1,0 +1,423 @@
+//! What villagers do with each other and with the player: gossip and
+//! reputation, sharing food and wares, picking up dropped items, making
+//! babies, calling iron golems and the prices they ask.
+use super::Game;
+use crate::{
+    gossip::{self, GossipType},
+    items::ItemStack,
+    mobs::{Mob, Species, spawning, villager},
+};
+use horizon_core::{geometry::Vec3, random::RandomSource};
+
+fn block_of(p: Vec3) -> [i32; 3] {
+    [p.x.floor() as i32, p.y.floor() as i32, p.z.floor() as i32]
+}
+/// `SpawnUtil.Strategy.LEGACY_IRON_GOLEM`: what a golem will not land on.
+fn golem_floor_ok(name: &str) -> bool {
+    !matches!(
+        name,
+        "minecraft:cobweb"
+            | "minecraft:cactus"
+            | "minecraft:glass_pane"
+            | "minecraft:conduit"
+            | "minecraft:ice"
+            | "minecraft:tnt"
+            | "minecraft:glowstone"
+            | "minecraft:beacon"
+            | "minecraft:sea_lantern"
+            | "minecraft:frosted_ice"
+            | "minecraft:tinted_glass"
+            | "minecraft:glass"
+    ) && !name.ends_with("_stained_glass_pane")
+        && !name.ends_with("_stained_glass")
+        && !name.ends_with("leaves")
+}
+
+impl Game<'_> {
+    fn villager_index(&self, id: u32) -> Option<usize> {
+        self.mobs
+            .iter()
+            .position(|m| m.id == id && m.species() == Species::Villager)
+    }
+    fn item_max_stack(&self, item: &str) -> u32 {
+        self.res.items().get(item).map_or(64, |i| i.max_stack)
+    }
+    /// `BehaviorUtils.throwItem`: toss a stack from a villager's hand toward
+    /// a point.
+    fn villager_throw(&mut self, from: Vec3, eye: f64, to: Vec3, stack: ItemStack) {
+        let at = [from.x, eye - 0.3, from.z];
+        let d = Vec3::new(to.x - from.x, to.y - from.y, to.z - from.z).normalize();
+        self.spawn_item(stack, at, [d.x * 0.3, d.y * 0.3, d.z * 0.3], 10);
+    }
+
+    /// `TradeWithVillager.tick` for one pair: gossip (at most once in 1200
+    /// ticks for both), then surplus food and wanted wares tossed over.
+    pub(super) fn villager_meet(&mut self, a: u32, b: u32) {
+        let (Some(ia), Some(ib)) = (self.villager_index(a), self.villager_index(b)) else {
+            return;
+        };
+        let now = self.world.game_time;
+        let items = self.res.items();
+        let meeting = villager::meet(&mut self.mobs, ia, ib, now, |item| {
+            items.get(item).map_or(64, |i| i.max_stack)
+        });
+        for stack in meeting.thrown {
+            self.villager_throw(meeting.from, meeting.eye, meeting.to, stack);
+        }
+        if meeting.gossiped {
+            self.villager_golem_check(a, 5);
+        }
+    }
+
+    /// `Villager.spawnGolemIfNeeded`: when enough villagers nearby that
+    /// slept recently and saw no golem agree, an iron golem appears.
+    pub(super) fn villager_golem_check(&mut self, id: u32, needed: usize) {
+        let Some(i) = self.villager_index(id) else {
+            return;
+        };
+        let now = self.world.game_time;
+        if !villager::ext(&self.mobs[i]).is_some_and(|e| e.wants_golem(now)) {
+            return;
+        }
+        let at = self.mobs[i].position;
+        let nearby: Vec<usize> = self
+            .mobs
+            .iter()
+            .enumerate()
+            .filter(|(_, m)| {
+                m.species() == Species::Villager
+                    && m.alive()
+                    && (m.position.x - at.x).abs() <= 10.0
+                    && (m.position.y - at.y).abs() <= 10.0
+                    && (m.position.z - at.z).abs() <= 10.0
+            })
+            .map(|(j, _)| j)
+            .collect();
+        let wanting = nearby
+            .iter()
+            .filter(|j| villager::ext(&self.mobs[**j]).is_some_and(|e| e.wants_golem(now)))
+            .take(5)
+            .count();
+        if wanting < needed {
+            return;
+        }
+        if self.try_spawn_iron_golem(block_of(at)) {
+            for j in nearby {
+                villager::ext_mut(&mut self.mobs[j]).golem_until = now + 599;
+            }
+        }
+    }
+    /// `SpawnUtil.trySpawnMob(IRON_GOLEM, ..., 10 attempts, 8 across, 6 up
+    /// and down, LEGACY_IRON_GOLEM)`.
+    fn try_spawn_iron_golem(&mut self, start: [i32; 3]) -> bool {
+        for _ in 0..10 {
+            let r = &mut self.world.random;
+            let dx = r.next_int_bound(17).unwrap_or(8) - 8;
+            let dz = r.next_int_bound(17).unwrap_or(8) - 8;
+            let (x, z) = (start[0] + dx, start[2] + dz);
+            let mut y = start[1] + 6;
+            let mut above = self.world.block(x, y, z);
+            let mut found = None;
+            for _ in 0..=12 {
+                y -= 1;
+                let here = self.world.block(x, y, z);
+                let f = self.res.facts().get(here);
+                let above_f = self.res.facts().get(above);
+                let air_or_liquid = self.res.facts().is_air(above)
+                    || above_f.fluid != crate::blocks::Fluid::None;
+                let solid =
+                    self.res.mob_data().state(here).flags & crate::mobs::data::SOLID != 0
+                        || f.name.as_ref() == "minecraft:powder_snow";
+                if golem_floor_ok(&f.name) && air_or_liquid && solid {
+                    found = Some(y + 1);
+                    break;
+                }
+                above = here;
+            }
+            let Some(y) = found else { continue };
+            // IronGolem.checkSpawnRules: a floor and three free blocks.
+            let free = |g: &Self, yy: i32| {
+                g.res.mob_data().state(g.world.block(x, yy, z)).flags
+                    & crate::mobs::data::VALID_EMPTY_SPAWN
+                    != 0
+            };
+            if !(0..4).all(|k| free(self, y + k)) {
+                continue;
+            }
+            let at = [f64::from(x) + 0.5, f64::from(y), f64::from(z) + 0.5];
+            if let Some(id) = self.spawn_mob_for("minecraft:iron_golem", at, false, true)
+                && let Some(m) = self.mobs.iter_mut().find(|m| m.id == id)
+            {
+                let sound = m.kind.sounds[0];
+                if !sound.is_empty() {
+                    let at = m.center();
+                    self.audio
+                        .play(&format!("minecraft:{sound}"), Some(at), 1.0, 1.0);
+                }
+                return true;
+            }
+        }
+        false
+    }
+
+    /// `VillagerMakeLove.tryToGiveBirth`: both eat, a free bed within 48
+    /// blocks is taken for the child, who is a baby villager of one of
+    /// three villager types.
+    pub(super) fn villager_birth(
+        &mut self,
+        parent: u32,
+        partner: u32,
+        child: Option<([i32; 3], Option<u8>)>,
+    ) {
+        let (Some(ia), Some(ib)) = (self.villager_index(parent), self.villager_index(partner))
+        else {
+            return;
+        };
+        villager::ext_mut(&mut self.mobs[ib]).eat_and_digest();
+        let from = self.mobs[ia].position;
+        let Some((bed, variant)) = child else {
+            // VillagerMakeLove: entity event 13 for the partner, then the parent.
+            for i in [ib, ia] {
+                let id = self.mobs[i].id;
+                self.villager_particles(id, "angry_villager");
+            }
+            return;
+        };
+        let variant = variant.unwrap_or_else(|| {
+            let facts = self.biome_facts(
+                from.x.floor() as i32,
+                from.y.floor() as i32,
+                from.z.floor() as i32,
+            );
+            spawning::villager_type(&facts)
+        });
+        self.mobs[ib].extra.age = 6000;
+        let Some(id) =
+            self.spawn_mob_for("minecraft:villager", [from.x, from.y, from.z], true, true)
+        else {
+            return;
+        };
+        if let Some(child) = self.mobs.iter_mut().find(|m| m.id == id) {
+            child.extra.variant = variant;
+            child.extra.variant2 = villager::NONE;
+            child.extra.age = -24000;
+            child.extra.bed = Some(bed);
+        }
+        // VillagerMakeLove.giveBirth: entity event 12 for the child.
+        self.villager_particles(id, "heart");
+    }
+    /// `Villager.handleEntityEvent` 12, 13, 14 and 42:
+    /// `AbstractVillager.addParticlesAroundSelf`.
+    pub(super) fn villager_particles(&mut self, id: u32, kind: &'static str) {
+        self.particles_around_mob(id, kind, crate::particles::Burst::VILLAGER);
+    }
+    /// `particles::around_self` about mob `id`.
+    pub(super) fn particles_around_mob(
+        &mut self,
+        id: u32,
+        kind: &'static str,
+        burst: crate::particles::Burst,
+    ) {
+        let Some(m) = self.mobs.iter().find(|m| m.id == id) else {
+            return;
+        };
+        let feet = [m.position.x, m.position.y, m.position.z];
+        let size = [f64::from(m.width()), f64::from(m.height())];
+        self.particles_around(kind, feet, size, burst);
+    }
+    /// `particles::around_self` on the client: the particle engine's random
+    /// stands in for the client entity's, so no server draw moves.
+    pub(super) fn particles_around(
+        &mut self,
+        kind: &'static str,
+        feet: [f64; 3],
+        size: [f64; 2],
+        burst: crate::particles::Burst,
+    ) {
+        let Some(ty) = crate::particles::ParticleType::from_name(kind) else {
+            return;
+        };
+        let options = crate::particles::ParticleOptions::simple(ty);
+        let mut spawned = Vec::new();
+        crate::particles::around_self(
+            self.particles.random(),
+            feet,
+            size[0],
+            size[1],
+            burst,
+            |p, v| spawned.push((p, v)),
+        );
+        for (p, v) in spawned {
+            self.particles.add(&options, p, v);
+        }
+    }
+
+    /// `Mob.aiStep` item pickup for villagers (`InventoryCarrier`): food,
+    /// seeds and what their profession wants, from within a block.
+    pub(super) fn villager_pickups(&mut self) {
+        if self.dropped.is_empty() || !self.ui.rules.bool("mob_griefing") {
+            return;
+        }
+        let picks_up = self
+            .res
+            .items()
+            .item_tags
+            .get("minecraft:villager_picks_up")
+            .cloned();
+        for i in 0..self.mobs.len() {
+            let m = &self.mobs[i];
+            if m.species() != Species::Villager || !m.alive() {
+                continue;
+            }
+            let (pos, half) = (m.position, f64::from(m.width()) / 2.0 + 1.0);
+            let top = f64::from(m.height());
+            let requested = villager::requested_items(m);
+            let mut j = 0;
+            while j < self.dropped.len() {
+                let e = &self.dropped[j];
+                let near = (e.position.x - pos.x).abs() <= half
+                    && (e.position.z - pos.z).abs() <= half
+                    && e.position.y >= pos.y - 0.25
+                    && e.position.y <= pos.y + top;
+                let item = e.stack.item.clone();
+                let wants = villager::food_points(&item) > 0
+                    || picks_up.as_ref().is_some_and(|t| t.contains(&*item))
+                    || requested.contains(&&*item);
+                if !near || e.pickup_delay > 0 || !wants {
+                    j += 1;
+                    continue;
+                }
+                let max = self.item_max_stack(&item);
+                let stack = self.dropped[j].stack.clone();
+                if !villager::ext_mut(&mut self.mobs[i]).can_add(&stack, max) {
+                    j += 1;
+                    continue;
+                }
+                let before = self.dropped[j].clone();
+                let rest = villager::ext_mut(&mut self.mobs[i]).add_item(stack, max);
+                if rest.as_ref().is_none_or(|r| r.count < before.stack.count) {
+                    let id = self.mobs[i].id;
+                    self.add_pickup(
+                        super::pickups::Taken::Item(Box::new(before)),
+                        super::pickups::Collector::Mob(id),
+                    );
+                }
+                match rest {
+                    None => {
+                        self.dropped.remove(j);
+                    }
+                    Some(rest) => {
+                        self.dropped[j].stack.count = rest.count;
+                        j += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    /// `Villager.setLastHurtByMob` and `ServerLevel.onReputationEvent`: a hit
+    /// from the player counts against it with the villager that was hit.
+    pub(super) fn villager_reputation_tick(&mut self) {
+        let Some(uuid) = self.level.player_uuid else {
+            return;
+        };
+        let mut angry = Vec::new();
+        for m in &mut self.mobs {
+            if m.species() != Species::Villager
+                || m.ai.last_hurt_by != Some(crate::mobs::Who::Player)
+            {
+                continue;
+            }
+            let time = m.ai.last_hurt_by_time;
+            let alive = m.alive();
+            let at = m.id;
+            let e = villager::ext_mut(m);
+            if e.hurt_seen != time {
+                e.hurt_seen = time;
+                e.gossips.add(
+                    uuid,
+                    GossipType::MinorNegative,
+                    gossip::REPUTATION_CHANGE_PER_EVENT,
+                );
+                if alive {
+                    angry.push(at);
+                }
+            }
+        }
+        // Villager.setLastHurtByMob: entity event 13.
+        for id in angry {
+            self.villager_particles(id, "angry_villager");
+        }
+    }
+    /// `Villager.tellWitnessesThatIWasMurdered`: the villagers that saw a
+    /// player kill one remember it as a major wrong.
+    pub(super) fn villager_murdered(&mut self, victim: &Mob, by_player: bool) {
+        if victim.species() != Species::Villager || !by_player {
+            return;
+        }
+        let Some(uuid) = self.level.player_uuid else {
+            return;
+        };
+        let eye = Vec3::new(victim.position.x, victim.eye_y(), victim.position.z);
+        let witnesses: Vec<usize> = {
+            let w = self.mob_world_base(&[]);
+            self.mobs
+                .iter()
+                .enumerate()
+                .filter(|(_, m)| {
+                    m.id != victim.id
+                        && m.species() == Species::Villager
+                        && m.alive()
+                        && (m.position.x - victim.position.x).abs() <= 16.0
+                        && (m.position.y - victim.position.y).abs() <= 16.0
+                        && (m.position.z - victim.position.z).abs() <= 16.0
+                        && w.line_of_sight(eye, Vec3::new(m.position.x, m.eye_y(), m.position.z))
+                })
+                .map(|(i, _)| i)
+                .collect()
+        };
+        for i in witnesses {
+            villager::ext_mut(&mut self.mobs[i]).gossips.add(
+                uuid,
+                GossipType::MajorNegative,
+                gossip::REPUTATION_CHANGE_PER_EVENT,
+            );
+        }
+    }
+    /// `ReputationEventType.TRADE`: each trade earns a little trust.
+    pub(super) fn villager_traded(&mut self, id: u32) {
+        if let Some(uuid) = self.level.player_uuid {
+            self.villager_traded_by(id, uuid);
+        }
+    }
+    /// The TRADE reputation event from the player `uuid` (a guest's too).
+    pub(super) fn villager_traded_by(&mut self, id: u32, uuid: [i32; 4]) {
+        let Some(i) = self.villager_index(id) else {
+            return;
+        };
+        villager::ext_mut(&mut self.mobs[i]).gossips.add(
+            uuid,
+            GossipType::Trading,
+            gossip::REPUTATION_CHANGE_PER_TRADE,
+        );
+        // Villager.customServerAiStep after a trade: entity event 14.
+        self.villager_particles(id, "happy_villager");
+    }
+    /// `Villager.getPlayerReputation` of the local player.
+    pub(super) fn villager_reputation(&self, id: u32) -> i32 {
+        let Some(uuid) = self.level.player_uuid else {
+            return 0;
+        };
+        self.villager_reputation_of(id, uuid)
+    }
+    /// `Villager.getPlayerReputation` of the player `uuid`.
+    pub(super) fn villager_reputation_of(&self, id: u32, uuid: [i32; 4]) -> i32 {
+        self.villager_index(id)
+            .and_then(|i| villager::ext(&self.mobs[i]))
+            .map_or(0, |e| e.gossips.reputation(uuid))
+    }
+    /// The Hero of the Village amplifier of the player, if any.
+    pub(super) fn hero_amplifier(&self) -> Option<i32> {
+        self.potions.effects.amplifier("hero_of_the_village")
+    }
+}
