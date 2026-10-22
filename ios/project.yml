@@ -20,7 +20,7 @@ targets:
         FRAMEWORK_SEARCH_PATHS: "$(inherited) $(PLATFORM_DIR)/Developer/Library/Frameworks"
         OTHER_LDFLAGS:
           - "-L../target/aarch64-apple-ios/release"
-          - "-l:libhorizon_client.a"
+          - "-lhorizon_client"
           - "-framework Metal"
           - "-framework UIKit"
           - "-framework QuartzCore"
