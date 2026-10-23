@@ -39,7 +39,7 @@ jobs:
           cd ios
           xcodebuild -project Horizon.xcodeproj -scheme Horizon -sdk iphoneos -configuration Release CODE_SIGNING_ALLOWED=NO -derivedDataPath ./build build
           
-            - name: Package into IPA
+      - name: Package into IPA
         run: |
           mkdir -p build/Payload
           cp -R ios/build/Build/Products/Release-iphoneos/Horizon.app build/Payload/
