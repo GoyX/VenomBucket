@@ -10105,9 +10105,14 @@ impl ApplicationHandler for Game<'_> {
         // The Window constructor: created fullscreen when options.txt says so.
         let fullscreen = self.settings.fullscreen;
         self.fullscreen = crate::window::FullscreenState::new(fullscreen);
-        let attributes = Window::default_attributes()
+        let mut attributes = Window::default_attributes()
             .with_title("VenomBucket")
             .with_window_icon(crate::window::icon());
+
+        #[cfg(target_os = "ios")]
+        {
+            attributes = attributes.with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+        }
         // Wayland names the window by its app id, which the horizon.desktop entry matches.
         #[cfg(target_os = "linux")]
         let attributes = winit::platform::wayland::WindowAttributesExtWayland::with_name(
@@ -10166,6 +10171,9 @@ impl ApplicationHandler for Game<'_> {
                 (crate::ios::KEY_D.load(Ordering::Relaxed), KeyCode::KeyD),
                 (crate::ios::KEY_SPACE.load(Ordering::Relaxed), KeyCode::Space),
                 (crate::ios::KEY_SHIFT.load(Ordering::Relaxed), KeyCode::ShiftLeft),
+                (crate::ios::KEY_E.load(Ordering::Relaxed), KeyCode::KeyE),
+                (crate::ios::KEY_T.load(Ordering::Relaxed), KeyCode::KeyT),
+                (crate::ios::KEY_ESC.load(Ordering::Relaxed), KeyCode::Escape),
             ];
             for (pressed, key) in keys {
                 if pressed {
@@ -10174,6 +10182,20 @@ impl ApplicationHandler for Game<'_> {
                 } else {
                     self.physical_keys.remove(&key);
                     self.keys.remove(&key);
+                }
+            }
+
+            // Inject Mouse Clicks
+            let btn_map = [
+                (MouseButton::Left, &crate::ios::MOUSE_BTN_STATE[0], &crate::ios::MOUSE_BTN_PREV[0]),
+                (MouseButton::Right, &crate::ios::MOUSE_BTN_STATE[1], &crate::ios::MOUSE_BTN_PREV[1]),
+            ];
+            for (btn, state, prev) in btn_map {
+                let is_pressed = state.load(Ordering::Relaxed);
+                let was_pressed = prev.load(Ordering::Relaxed);
+                if is_pressed != was_pressed {
+                    prev.store(is_pressed, Ordering::Relaxed);
+                    self.play_mouse(btn, is_pressed)?;
                 }
             }
         }
@@ -12256,9 +12278,14 @@ impl Loading {
         // The Window constructor: created fullscreen when options.txt says so.
         let fullscreen = self.settings.fullscreen;
         self.fullscreen = crate::window::FullscreenState::new(fullscreen);
-        let attributes = Window::default_attributes()
+        let mut attributes = Window::default_attributes()
             .with_title("VenomBucket")
             .with_window_icon(crate::window::icon());
+
+        #[cfg(target_os = "ios")]
+        {
+            attributes = attributes.with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+        }
         // Wayland names the window by its app id, which the horizon.desktop entry matches.
         #[cfg(target_os = "linux")]
         let attributes = winit::platform::wayland::WindowAttributesExtWayland::with_name(

@@ -3,88 +3,129 @@ import UIKit
 @_silgen_name("ios_inject_key")
 func ios_inject_key(keycode: UInt32, pressed: Bool)
 
+@_silgen_name("ios_inject_mouse_motion")
+func ios_inject_mouse_motion(dx: Float, dy: Float)
+
+@_silgen_name("ios_inject_mouse_button")
+func ios_inject_mouse_button(button: Int32, pressed: Bool)
+
 class GameViewController: UIViewController {
-    let joystickBase = UIView()
-    let joystickKnob = UIView()
-    var joystickCenter = CGPoint.zero
-    
-    let jumpButton = UIButton(type: .system)
     
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .clear
         view.isMultipleTouchEnabled = true
         
-        let size: CGFloat = 120
-        let margin: CGFloat = 50
-        joystickBase.frame = CGRect(x: margin, y: view.bounds.height - size - margin, width: size, height: size)
-        joystickBase.backgroundColor = UIColor(white: 1.0, alpha: 0.2)
-        joystickBase.layer.cornerRadius = size / 2
-        view.addSubview(joystickBase)
-        
-        let knobSize: CGFloat = 50
-        joystickKnob.frame = CGRect(x: (size - knobSize)/2, y: (size - knobSize)/2, width: knobSize, height: knobSize)
-        joystickKnob.backgroundColor = UIColor(white: 1.0, alpha: 0.5)
-        joystickKnob.layer.cornerRadius = knobSize / 2
-        joystickBase.addSubview(joystickKnob)
-        
-        joystickCenter = CGPoint(x: joystickBase.bounds.midX, y: joystickBase.bounds.midY)
-        
-        let btnSize: CGFloat = 60
-        jumpButton.frame = CGRect(x: view.bounds.width - btnSize - margin, y: view.bounds.height - btnSize - margin, width: btnSize, height: btnSize)
-        jumpButton.setTitle("Jump", for: .normal)
-        jumpButton.backgroundColor = UIColor(white: 1.0, alpha: 0.3)
-        jumpButton.layer.cornerRadius = 8
-        jumpButton.addTarget(self, action: #selector(jumpPressed), for: .touchDown)
-        jumpButton.addTarget(self, action: #selector(jumpReleased), for: [.touchUpInside, .touchUpOutside])
-        view.addSubview(jumpButton)
+        setupDpad()
+        setupActionButtons()
     }
     
-    @objc func jumpPressed() { ios_inject_key(keycode: 4, pressed: true) }
-    @objc func jumpReleased() { ios_inject_key(keycode: 4, pressed: false) }
+    func createButton(title: String, frame: CGRect, color: UIColor = UIColor(white: 1.0, alpha: 0.3)) -> UIButton {
+        let btn = UIButton(type: .system)
+        btn.frame = frame
+        btn.setTitle(title, for: .normal)
+        btn.setTitleColor(.white, for: .normal)
+        btn.backgroundColor = color
+        btn.layer.cornerRadius = 8
+        btn.titleLabel?.font = UIFont.boldSystemFont(ofSize: 14)
+        btn.isMultipleTouchEnabled = true
+        view.addSubview(btn)
+        return btn
+    }
     
-    var leftTouch: UITouch?
+    func setupDpad() {
+        let size: CGFloat = 60
+        let margin: CGFloat = 30
+        let startY = view.bounds.height - (size * 3) - margin
+        
+        let up = createButton(title: "▲", frame: CGRect(x: margin + size, y: startY, width: size, height: size))
+        up.addTarget(self, action: #selector(keyW(_:)), for: [.touchDown, .touchUpInside, .touchUpOutside])
+        
+        let down = createButton(title: "▼", frame: CGRect(x: margin + size, y: startY + size * 2, width: size, height: size))
+        down.addTarget(self, action: #selector(keyS(_:)), for: [.touchDown, .touchUpInside, .touchUpOutside])
+        
+        let left = createButton(title: "◀", frame: CGRect(x: margin, y: startY + size, width: size, height: size))
+        left.addTarget(self, action: #selector(keyA(_:)), for: [.touchDown, .touchUpInside, .touchUpOutside])
+        
+        let right = createButton(title: "▶", frame: CGRect(x: margin + size * 2, y: startY + size, width: size, height: size))
+        right.addTarget(self, action: #selector(keyD(_:)), for: [.touchDown, .touchUpInside, .touchUpOutside])
+    }
+    
+    func setupActionButtons() {
+        let size: CGFloat = 55
+        let margin: CGFloat = 30
+        let rightX = view.bounds.width - size - margin
+        let bottomY = view.bounds.height - size - margin
+        
+        // Bottom Right: Break / Place
+        let breakBtn = createButton(title: "Break", frame: CGRect(x: rightX - size * 2 - 10, y: bottomY, width: size, height: size), color: UIColor(red: 0.8, green: 0.2, blue: 0.2, alpha: 0.5))
+        breakBtn.addTarget(self, action: #selector(mouseLeft(_:)), for: [.touchDown, .touchUpInside, .touchUpOutside])
+        
+        let placeBtn = createButton(title: "Place", frame: CGRect(x: rightX, y: bottomY, width: size, height: size), color: UIColor(red: 0.2, green: 0.8, blue: 0.2, alpha: 0.5))
+        placeBtn.addTarget(self, action: #selector(mouseRight(_:)), for: [.touchDown, .touchUpInside, .touchUpOutside])
+        
+        // Above: Jump / Sneak
+        let jump = createButton(title: "Jump", frame: CGRect(x: rightX, y: bottomY - size - 10, width: size, height: size))
+        jump.addTarget(self, action: #selector(keySpace(_:)), for: [.touchDown, .touchUpInside, .touchUpOutside])
+        
+        let sneak = createButton(title: "Sneak", frame: CGRect(x: rightX - size - 10, y: bottomY - size - 10, width: size, height: size))
+        sneak.addTarget(self, action: #selector(keyShift(_:)), for: [.touchDown, .touchUpInside, .touchUpOutside])
+        
+        // Top: Inv / Pause / Chat
+        let inv = createButton(title: "Inv", frame: CGRect(x: rightX, y: bottomY - size * 2 - 20, width: size, height: size))
+        inv.addTarget(self, action: #selector(keyE(_:)), for: [.touchDown, .touchUpInside, .touchUpOutside])
+        
+        let chat = createButton(title: "Chat", frame: CGRect(x: rightX - size - 10, y: bottomY - size * 2 - 20, width: size, height: size))
+        chat.addTarget(self, action: #selector(keyT(_:)), for: [.touchDown, .touchUpInside, .touchUpOutside])
+        
+        let pause = createButton(title: "Pause", frame: CGRect(x: rightX - size * 2 - 20, y: bottomY - size * 2 - 20, width: size, height: size))
+        pause.addTarget(self, action: #selector(keyEsc(_:)), for: [.touchDown, .touchUpInside, .touchUpOutside])
+    }
+    
+    // --- Actions ---
+    @objc func keyW(_ s: UIButton) { ios_inject_key(keycode: 0, pressed: s.isHighlighted) }
+    @objc func keyA(_ s: UIButton) { ios_inject_key(keycode: 1, pressed: s.isHighlighted) }
+    @objc func keyS(_ s: UIButton) { ios_inject_key(keycode: 2, pressed: s.isHighlighted) }
+    @objc func keyD(_ s: UIButton) { ios_inject_key(keycode: 3, pressed: s.isHighlighted) }
+    @objc func keySpace(_ s: UIButton) { ios_inject_key(keycode: 4, pressed: s.isHighlighted) }
+    @objc func keyShift(_ s: UIButton) { ios_inject_key(keycode: 5, pressed: s.isHighlighted) }
+    @objc func keyE(_ s: UIButton) { ios_inject_key(keycode: 6, pressed: s.isHighlighted) }
+    @objc func keyT(_ s: UIButton) { ios_inject_key(keycode: 7, pressed: s.isHighlighted) }
+    @objc func keyEsc(_ s: UIButton) { ios_inject_key(keycode: 8, pressed: s.isHighlighted) }
+    
+    @objc func mouseLeft(_ s: UIButton) { ios_inject_mouse_button(button: 0, pressed: s.isHighlighted) }
+    @objc func mouseRight(_ s: UIButton) { ios_inject_mouse_button(button: 1, pressed: s.isHighlighted) }
+    
+    // --- Camera Look ---
+    var lookTouch: UITouch?
+    var lastPoint: CGPoint?
     
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         for touch in touches {
             let loc = touch.location(in: view)
-            if joystickBase.frame.contains(loc) && leftTouch == nil {
-                leftTouch = touch
-                updateJoystick(touch)
+            if loc.x > view.bounds.width / 3 && lookTouch == nil {
+                lookTouch = touch
+                lastPoint = loc
             }
         }
     }
     
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        if let touch = leftTouch, touches.contains(touch) {
-            updateJoystick(touch)
+        if let touch = lookTouch, touches.contains(touch) {
+            let loc = touch.location(in: view)
+            if let last = lastPoint {
+                let dx = Float(loc.x - last.x)
+                let dy = Float(loc.y - last.y)
+                ios_inject_mouse_motion(dx: dx, dy: dy)
+            }
+            lastPoint = loc
         }
     }
     
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        if let touch = leftTouch, touches.contains(touch) {
-            leftTouch = nil
-            joystickKnob.center = joystickCenter
-            ios_inject_key(keycode: 0, pressed: false) // W
-            ios_inject_key(keycode: 1, pressed: false) // A
-            ios_inject_key(keycode: 2, pressed: false) // S
-            ios_inject_key(keycode: 3, pressed: false) // D
+        if let touch = lookTouch, touches.contains(touch) {
+            lookTouch = nil
+            lastPoint = nil
         }
-    }
-    
-    func updateJoystick(_ touch: UITouch) {
-        let loc = touch.location(in: joystickBase)
-        let dx = loc.x - joystickCenter.x
-        let dy = loc.y - joystickCenter.y
-        let distance = sqrt(dx*dx + dy*dy)
-        let maxDist = joystickBase.bounds.width / 2
-        let clampedX = distance > maxDist ? dx / distance * maxDist : dx
-        let clampedY = distance > maxDist ? dy / distance * maxDist : dy
-        joystickKnob.center = CGPoint(x: joystickCenter.x + clampedX, y: joystickCenter.y + clampedY)
-        
-        ios_inject_key(keycode: 0, pressed: clampedY < -20) // W
-        ios_inject_key(keycode: 2, pressed: clampedY > 20)  // S
-        ios_inject_key(keycode: 1, pressed: clampedX < -20) // A
-        ios_inject_key(keycode: 3, pressed: clampedX > 20)  // D
     }
 }
