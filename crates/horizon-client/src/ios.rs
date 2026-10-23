@@ -12,6 +12,15 @@ pub static MOUSE_DY: AtomicI32 = AtomicI32::new(0);
 
 #[unsafe(no_mangle)]
 pub extern "C" fn start_ios() {
+    // Catch Rust panics and write them to a file we can read
+    std::panic::set_hook(Box::new(|info| {
+        let msg = format!("Rust Panic: {}\n", info);
+        let home = std::env::var("HOME").unwrap_or_default();
+        let path = std::path::PathBuf::from(home).join("Documents").join("panic.log");
+        let _ = std::fs::create_dir_all(path.parent().unwrap());
+        let _ = std::fs::write(path, msg);
+    }));
+
     let _ = crate::game::run();
 }
 
