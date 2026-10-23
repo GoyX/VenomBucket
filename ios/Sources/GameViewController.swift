@@ -65,10 +65,10 @@ class GameViewController: UIViewController {
         if let touch = leftTouch, touches.contains(touch) {
             leftTouch = nil
             joystickKnob.center = joystickCenter
-            ios_inject_key(keycode: 0, pressed: false)
-            ios_inject_key(keycode: 1, pressed: false)
-            ios_inject_key(keycode: 2, pressed: false)
-            ios_inject_key(keycode: 3, pressed: false)
+            ios_inject_key(keycode: 0, pressed: false) // W
+            ios_inject_key(keycode: 1, pressed: false) // A
+            ios_inject_key(keycode: 2, pressed: false) // S
+            ios_inject_key(keycode: 3, pressed: false) // D
         }
     }
     

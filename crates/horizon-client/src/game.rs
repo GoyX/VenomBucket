@@ -289,12 +289,26 @@ impl Options {
             .parent()
             .ok_or("missing executable directory")?
             .join("resources");
-        let mut o = Self {
-            resources: if sibling.join("horizon-resources.json").exists() {
-                sibling
-            } else {
-                std::path::Path::new(".local/horizon-client").join(horizon_core::VANILLA_VERSION)
-            },
+            let mut resources = if sibling.join("horizon-resources.json").exists() {
+        sibling
+    } else {
+        std::path::Path::new(".local/horizon-client").join(horizon_core::VANILLA_VERSION)
+    };
+
+    #[cfg(target_os = "ios")]
+    {
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(parent) = exe.parent() {
+                let bundle_res = parent.join("GameData").join(horizon_core::VANILLA_VERSION);
+                if bundle_res.exists() {
+                    resources = bundle_res;
+                }
+            }
+        }
+    }
+
+    let mut o = Self {
+        resources,
             distance: 12,
             distance_override: None,
             seed: 0,
@@ -10142,6 +10156,27 @@ impl ApplicationHandler for Game<'_> {
         if let WindowEvent::Focused(false) = &event {
             self.physical_keys.clear();
         }
+        #[cfg(target_os = "ios")]
+        {
+            use std::sync::atomic::Ordering;
+            let keys = [
+                (crate::ios::KEY_W.load(Ordering::Relaxed), KeyCode::KeyW),
+                (crate::ios::KEY_A.load(Ordering::Relaxed), KeyCode::KeyA),
+                (crate::ios::KEY_S.load(Ordering::Relaxed), KeyCode::KeyS),
+                (crate::ios::KEY_D.load(Ordering::Relaxed), KeyCode::KeyD),
+                (crate::ios::KEY_SPACE.load(Ordering::Relaxed), KeyCode::Space),
+                (crate::ios::KEY_SHIFT.load(Ordering::Relaxed), KeyCode::ShiftLeft),
+            ];
+            for (pressed, key) in keys {
+                if pressed {
+                    self.physical_keys.insert(key);
+                    self.keys.insert(key);
+                } else {
+                    self.physical_keys.remove(&key);
+                    self.keys.remove(&key);
+                }
+            }
+        }
         if let WindowEvent::ModifiersChanged(m) = &event {
             self.modifiers = m.state();
         }
@@ -10787,6 +10822,16 @@ impl ApplicationHandler for Game<'_> {
                     self.extras_frame(elapsed);
                     self.mods_frame(elapsed);
                     self.extras_retry()?;
+                    #[cfg(target_os = "ios")]
+                    {
+                        let dx = crate::ios::MOUSE_DX.swap(0, std::sync::atomic::Ordering::Relaxed);
+                        let dy = crate::ios::MOUSE_DY.swap(0, std::sync::atomic::Ordering::Relaxed);
+                        if dx != 0 || dy != 0 {
+                            self.yaw += dx as f32 * 0.15;
+                            self.pitch = (self.pitch - dy as f32 * 0.15).clamp(-90.0, 90.0);
+                        }
+                    }
+                    self.apply_mouse_look();
                     self.apply_mouse_look();
                     self.pad_look(elapsed.as_secs_f32());
                     self.advance_flight();

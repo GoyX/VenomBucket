@@ -5,22 +5,19 @@ func start_ios()
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
-    var window: UIWindow?
-    var gameVC: GameViewController?
+    var overlayWindow: UIWindow?
 
-    func application(
-        _ application: UIApplication,
-        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
-    ) -> Bool {
-        window = UIWindow(frame: UIScreen.main.bounds)
-        gameVC = GameViewController()
-        window?.rootViewController = gameVC
-        window?.makeKeyAndVisible()
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        // 1. Create the touch overlay window
+        overlayWindow = UIWindow(frame: UIScreen.main.bounds)
+        overlayWindow?.windowLevel = .alert + 1 // Keeps it on top of the game
+        overlayWindow?.backgroundColor = .clear
+        overlayWindow?.rootViewController = GameViewController()
+        overlayWindow?.isHidden = false
 
-        DispatchQueue.global(qos: .userInteractive).async {
-            start_ios()
-        }
-
+        // 2. Start Rust on the MAIN thread (fixes the instant crash)
+        start_ios()
+        
         return true
     }
 }
