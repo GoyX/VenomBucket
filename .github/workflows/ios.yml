@@ -39,20 +39,25 @@ jobs:
           cd ios
           xcodebuild -project Horizon.xcodeproj -scheme Horizon -sdk iphoneos -configuration Release CODE_SIGNING_ALLOWED=NO -derivedDataPath ./build build
           
-      - name: Package into IPA
+            - name: Package into IPA
         run: |
           mkdir -p build/Payload
           cp -R ios/build/Build/Products/Release-iphoneos/Horizon.app build/Payload/
           
-          # Force inject the Bundle ID and Executable name to guarantee iOS can read it
+          # Force inject the Bundle ID just in case Xcode missed it
           /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier dev.venombucket.client" build/Payload/Horizon.app/Info.plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable Horizon" build/Payload/Horizon.app/Info.plist
+          
+          # Print the plist to the log to verify it is 100% correct
+          echo "--- VERIFYING INFO.PLIST ---"
+          plutil -p build/Payload/Horizon.app/Info.plist
+          echo "----------------------------"
           
           # Ensure the binary has execute permissions
           chmod +x build/Payload/Horizon.app/Horizon
           
           cd build
-          # Use ditto instead of zip (Apple's native tool that preserves iOS permissions perfectly)
+          # Use ditto instead of zip
           ditto -c -k --sequesterRsrc --keepParent Payload Horizon-unsigned.ipa
           
       - name: Upload Artifact

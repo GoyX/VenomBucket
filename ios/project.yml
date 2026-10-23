@@ -15,7 +15,6 @@ targets:
         buildPhase: resources
     settings:
       base:
-        INFOPLIST_FILE: Info.plist
         PRODUCT_BUNDLE_IDENTIFIER: dev.venombucket.client
         FRAMEWORK_SEARCH_PATHS: "$(inherited) $(PLATFORM_DIR)/Developer/Library/Frameworks"
         OTHER_LDFLAGS:
@@ -30,3 +29,25 @@ targets:
           - "-framework CoreGraphics"
           - "-framework Foundation"
           - "-framework CoreFoundation"
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: VenomBucket
+        CFBundleName: VenomBucket
+        CFBundleIdentifier: dev.venombucket.client
+        CFBundleExecutable: Horizon
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        LSApplicationCategoryType: public.app-category.games
+        MinimumOSVersion: "15.0"
+        UIStatusBarHidden: true
+        UIViewControllerBasedStatusBarAppearance: false
+        UIRequiredDeviceCapabilities:
+          - arm64
+          - metal
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        NSHumanReadableCopyright: "MIT licensed. Not an official Minecraft product."
