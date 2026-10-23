@@ -44,20 +44,31 @@ jobs:
           mkdir -p build/Payload
           cp -R ios/build/Build/Products/Release-iphoneos/Horizon.app build/Payload/
           
-          # Force inject the Bundle ID just in case Xcode missed it
+          # Force inject the Bundle ID and Executable
           /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier dev.venombucket.client" build/Payload/Horizon.app/Info.plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable Horizon" build/Payload/Horizon.app/Info.plist
           
-          # Print the plist to the log to verify it is 100% correct
+          # Force the Info.plist to be Apple's native binary format (bplist00)
+          plutil -convert binary1 build/Payload/Horizon.app/Info.plist
+          
+          # Overwrite PkgInfo with exact 8 bytes
+          echo -n "APPL????" > build/Payload/Horizon.app/PkgInfo
+          
+          # Set exact permissions (folders 755, plist 644, binary 755)
+          find build/Payload -type d -exec chmod 755 {} \;
+          find build/Payload -type f -exec chmod 644 {} \;
+          chmod 755 build/Payload/Horizon.app/Horizon
+          
+          # FIX: Strip all Mac extended attributes (xattr) which corrupt Windows sideloaders
+          xattr -cr build/Payload
+          
+          # Verify the plist one last time
           echo "--- VERIFYING INFO.PLIST ---"
           plutil -p build/Payload/Horizon.app/Info.plist
           echo "----------------------------"
           
-          # Ensure the binary has execute permissions
-          chmod +x build/Payload/Horizon.app/Horizon
-          
           cd build
-          # Use ditto instead of zip
+          # Use ditto (Apple's native tool) to package the IPA perfectly
           ditto -c -k --sequesterRsrc --keepParent Payload Horizon-unsigned.ipa
           
       - name: Upload Artifact
