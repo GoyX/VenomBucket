@@ -23,8 +23,8 @@ jobs:
       - name: Download Game Assets
         run: |
           curl -L -o assets.zip "https://pub-7a7e79921dcf455280d0de7c4a48369f.r2.dev/horizon-assets.zip"
-          mkdir -p ios/Resources
-          unzip -q assets.zip -d ios/Resources/
+          mkdir -p ios/GameData
+          unzip -q assets.zip -d ios/GameData/
           
       - name: Install XcodeGen
         run: brew install xcodegen
