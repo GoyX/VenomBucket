@@ -43,7 +43,17 @@ jobs:
         run: |
           mkdir -p build/Payload
           cp -R ios/build/Build/Products/Release-iphoneos/Horizon.app build/Payload/
-          cd build && zip -r Horizon-unsigned.ipa Payload
+          
+          # Force inject the Bundle ID and Executable name to guarantee iOS can read it
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier dev.venombucket.client" build/Payload/Horizon.app/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable Horizon" build/Payload/Horizon.app/Info.plist
+          
+          # Ensure the binary has execute permissions
+          chmod +x build/Payload/Horizon.app/Horizon
+          
+          cd build
+          # Use ditto instead of zip (Apple's native tool that preserves iOS permissions perfectly)
+          ditto -c -k --sequesterRsrc --keepParent Payload Horizon-unsigned.ipa
           
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
