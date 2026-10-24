@@ -10758,7 +10758,7 @@ impl ApplicationHandler for Game<'_> {
                     self.mapped_key(key, event.state == ElementState::Pressed, event.repeat)?;
                 }
                 WindowEvent::RedrawRequested => {
-                    #[cfg(target_os = "ios")]
+                                        #[cfg(target_os = "ios")]
                     {
                         use std::sync::atomic::Ordering;
                         
@@ -10807,7 +10807,7 @@ impl ApplicationHandler for Game<'_> {
                             let _ = self.debug_key(KeyCode::F3, action);
                         }
 
-                        // 4. Mouse Click Injection
+                        // 4. Mouse Click Injection (Dispatch via window_event so menus actually receive it)
                         let btn_map = [
                             (MouseButton::Left, &crate::ios::MOUSE_BTN_STATE[0], &crate::ios::MOUSE_BTN_PREV[0]),
                             (MouseButton::Right, &crate::ios::MOUSE_BTN_STATE[1], &crate::ios::MOUSE_BTN_PREV[1]),
@@ -10818,7 +10818,24 @@ impl ApplicationHandler for Game<'_> {
                             if is_pressed != was_pressed {
                                 prev.store(is_pressed, Ordering::Relaxed);
                                 self.last_input = Instant::now();
-                                self.play_mouse(btn, is_pressed)?;
+                                
+                                // Dispatch CursorMoved first so the UI registers the exact click position
+                                if let Some(window) = &self.window {
+                                    let size = window.inner_size();
+                                    let x = (nx * size.width as f32) as f64;
+                                    let y = (ny * size.height as f32) as f64;
+                                    self.window_event(event_loop, id, WindowEvent::CursorMoved {
+                                        device_id: unsafe { std::mem::zeroed() },
+                                        position: winit::dpi::PhysicalPosition::new(x, y),
+                                    });
+                                }
+                                
+                                // Dispatch the actual Mouse Click event
+                                self.window_event(event_loop, id, WindowEvent::MouseInput {
+                                    device_id: unsafe { std::mem::zeroed() },
+                                    state: if is_pressed { ElementState::Pressed } else { ElementState::Released },
+                                    button: btn,
+                                });
                             }
                         }
                     }
