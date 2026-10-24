@@ -10118,15 +10118,18 @@ impl ApplicationHandler for Game<'_> {
         let attributes = winit::platform::wayland::WindowAttributesExtWayland::with_name(
             attributes, "horizon", "horizon",
         );
-        let window = match event_loop.create_window(
-            attributes
-                .with_inner_size(winit::dpi::LogicalSize::new(1280.0, 720.0))
-                .with_fullscreen(if cfg!(target_os = "ios") {
-                    Some(winit::window::Fullscreen::Borderless(None))
-                } else {
-                    fullscreen.then_some(winit::window::Fullscreen::Borderless(None))
-                }),
-        ) {
+        let mut attrs = attributes.with_fullscreen(if cfg!(target_os = "ios") {
+            Some(winit::window::Fullscreen::Borderless(None))
+        } else {
+            fullscreen.then_some(winit::window::Fullscreen::Borderless(None))
+        });
+
+        #[cfg(not(target_os = "ios"))]
+        {
+            attrs = attrs.with_inner_size(winit::dpi::LogicalSize::new(1280.0, 720.0));
+        }
+
+        let window = match event_loop.create_window(attrs) {
             Ok(w) => Arc::new(w),
             Err(e) => {
                 self.error = Some(e.into());
@@ -10168,6 +10171,19 @@ impl ApplicationHandler for Game<'_> {
         #[cfg(target_os = "ios")]
         {
             use std::sync::atomic::Ordering;
+            
+            // 1. Safe Cursor Update (Fixes the crash)
+            let nx = crate::ios::CURSOR_X.load(Ordering::Relaxed) as f32 / 10000.0;
+            let ny = crate::ios::CURSOR_Y.load(Ordering::Relaxed) as f32 / 10000.0;
+            if let Some(window) = &self.window {
+                let size = window.inner_size();
+                self.cursor = winit::dpi::PhysicalPosition::new(
+                    (nx * size.width as f32) as f64,
+                    (ny * size.height as f32) as f64,
+                );
+            }
+
+            // 2. Key injection
             let keys = [
                 (crate::ios::KEY_W.load(Ordering::Relaxed), KeyCode::KeyW),
                 (crate::ios::KEY_A.load(Ordering::Relaxed), KeyCode::KeyA),
@@ -10189,19 +10205,7 @@ impl ApplicationHandler for Game<'_> {
                 }
             }
 
-            // Dispatch a CursorMoved event directly to the game loop
-            let nx = crate::ios::CURSOR_X.load(Ordering::Relaxed) as f32 / 10000.0;
-            let ny = crate::ios::CURSOR_Y.load(Ordering::Relaxed) as f32 / 10000.0;
-            if let Some(window) = &self.window {
-                let size = window.inner_size();
-                let x = (nx * size.width as f32) as f64;
-                let y = (ny * size.height as f32) as f64;
-                self.window_event(event_loop, id, WindowEvent::CursorMoved {
-                    device_id: unsafe { std::mem::zeroed() },
-                    position: winit::dpi::PhysicalPosition::new(x, y),
-                });
-            }
-            // Inject Mouse Clicks
+            // 3. Mouse Click Injection
             let btn_map = [
                 (MouseButton::Left, &crate::ios::MOUSE_BTN_STATE[0], &crate::ios::MOUSE_BTN_PREV[0]),
                 (MouseButton::Right, &crate::ios::MOUSE_BTN_STATE[1], &crate::ios::MOUSE_BTN_PREV[1]),
@@ -12310,15 +12314,18 @@ impl Loading {
         let attributes = winit::platform::wayland::WindowAttributesExtWayland::with_name(
             attributes, "horizon", "horizon",
         );
-        let window = match event_loop.create_window(
-            attributes
-                .with_inner_size(winit::dpi::LogicalSize::new(1280.0, 720.0))
-                .with_fullscreen(if cfg!(target_os = "ios") {
-                    Some(winit::window::Fullscreen::Borderless(None))
-                } else {
-                    fullscreen.then_some(winit::window::Fullscreen::Borderless(None))
-                }),
-        ) {
+        let mut attrs = attributes.with_fullscreen(if cfg!(target_os = "ios") {
+            Some(winit::window::Fullscreen::Borderless(None))
+        } else {
+            fullscreen.then_some(winit::window::Fullscreen::Borderless(None))
+        });
+
+        #[cfg(not(target_os = "ios"))]
+        {
+            attrs = attrs.with_inner_size(winit::dpi::LogicalSize::new(1280.0, 720.0));
+        }
+
+        let window = match event_loop.create_window(attrs) {
             Ok(w) => Arc::new(w),
             Err(e) => {
                 self.error = Some(e.into());
