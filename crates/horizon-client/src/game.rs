@@ -10121,7 +10121,11 @@ impl ApplicationHandler for Game<'_> {
         let window = match event_loop.create_window(
             attributes
                 .with_inner_size(winit::dpi::LogicalSize::new(1280.0, 720.0))
-                .with_fullscreen(fullscreen.then_some(winit::window::Fullscreen::Borderless(None))),
+                .with_fullscreen(if cfg!(target_os = "ios") {
+                    Some(winit::window::Fullscreen::Borderless(None))
+                } else {
+                    fullscreen.then_some(winit::window::Fullscreen::Borderless(None))
+                }),
         ) {
             Ok(w) => Arc::new(w),
             Err(e) => {
@@ -10185,6 +10189,13 @@ impl ApplicationHandler for Game<'_> {
                 }
             }
 
+            let nx = crate::ios::CURSOR_X.load(Ordering::Relaxed) as f32 / 10000.0;
+            let ny = crate::ios::CURSOR_Y.load(Ordering::Relaxed) as f32 / 10000.0;
+            if let Some(window) = &self.window {
+                let size = window.inner_size();
+                self.cursor_x = nx * size.width as f32;
+                self.cursor_y = ny * size.height as f32;
+            }
             // Inject Mouse Clicks
             let btn_map = [
                 (MouseButton::Left, &crate::ios::MOUSE_BTN_STATE[0], &crate::ios::MOUSE_BTN_PREV[0]),
@@ -12297,7 +12308,11 @@ impl Loading {
         let window = match event_loop.create_window(
             attributes
                 .with_inner_size(winit::dpi::LogicalSize::new(1280.0, 720.0))
-                .with_fullscreen(fullscreen.then_some(winit::window::Fullscreen::Borderless(None))),
+                .with_fullscreen(if cfg!(target_os = "ios") {
+                    Some(winit::window::Fullscreen::Borderless(None))
+                } else {
+                    fullscreen.then_some(winit::window::Fullscreen::Borderless(None))
+                }),
         ) {
             Ok(w) => Arc::new(w),
             Err(e) => {
