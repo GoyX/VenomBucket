@@ -1,7 +1,5 @@
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 
-pub static CURSOR_X: AtomicI32 = AtomicI32::new(0);
-pub static CURSOR_Y: AtomicI32 = AtomicI32::new(0);
 pub static KEY_W: AtomicBool = AtomicBool::new(false);
 pub static KEY_A: AtomicBool = AtomicBool::new(false);
 pub static KEY_S: AtomicBool = AtomicBool::new(false);
@@ -11,11 +9,18 @@ pub static KEY_SHIFT: AtomicBool = AtomicBool::new(false);
 pub static KEY_E: AtomicBool = AtomicBool::new(false);
 pub static KEY_T: AtomicBool = AtomicBool::new(false);
 pub static KEY_ESC: AtomicBool = AtomicBool::new(false);
+pub static KEY_F3: AtomicBool = AtomicBool::new(false);
+pub static KEY_F1: AtomicBool = AtomicBool::new(false);
+
+pub static KEY_F3_PREV: AtomicBool = AtomicBool::new(false);
+pub static KEY_F1_PREV: AtomicBool = AtomicBool::new(false);
+
+pub static CURSOR_X: AtomicI32 = AtomicI32::new(0);
+pub static CURSOR_Y: AtomicI32 = AtomicI32::new(0);
 
 pub static MOUSE_DX: AtomicI32 = AtomicI32::new(0);
 pub static MOUSE_DY: AtomicI32 = AtomicI32::new(0);
 
-// 0 = Left, 1 = Right
 pub static MOUSE_BTN_STATE: [AtomicBool; 2] = [AtomicBool::new(false), AtomicBool::new(false)];
 pub static MOUSE_BTN_PREV: [AtomicBool; 2] = [AtomicBool::new(false), AtomicBool::new(false)];
 
@@ -43,6 +48,8 @@ pub extern "C" fn ios_inject_key(keycode: u32, pressed: bool) {
         6 => KEY_E.store(pressed, Ordering::Relaxed),
         7 => KEY_T.store(pressed, Ordering::Relaxed),
         8 => KEY_ESC.store(pressed, Ordering::Relaxed),
+        9 => KEY_F3.store(pressed, Ordering::Relaxed),
+        10 => KEY_F1.store(pressed, Ordering::Relaxed),
         _ => {}
     }
 }
@@ -62,7 +69,6 @@ pub extern "C" fn ios_inject_mouse_button(button: i32, pressed: bool) {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn ios_inject_cursor(x: f32, y: f32) {
-    // Store as normalized 0.0 - 1.0 for precision
     CURSOR_X.store((x * 10000.0) as i32, Ordering::Relaxed);
     CURSOR_Y.store((y * 10000.0) as i32, Ordering::Relaxed);
 }

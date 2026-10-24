@@ -10173,9 +10173,9 @@ impl ApplicationHandler for Game<'_> {
         {
             use std::sync::atomic::Ordering;
             
-            // 1. Safe Cursor Update (Fixes the crash)
-            let nx = crate::ios::CURSOR_X.load(Ordering::Relaxed) as f32 / 10000.0;
-            let ny = crate::ios::CURSOR_Y.load(Ordering::Relaxed) as f32 / 10000.0;
+            // 1. Safe Cursor Update (Clamped to prevent out-of-bounds crash)
+            let nx = (crate::ios::CURSOR_X.load(Ordering::Relaxed) as f32 / 10000.0).clamp(0.0, 1.0);
+            let ny = (crate::ios::CURSOR_Y.load(Ordering::Relaxed) as f32 / 10000.0).clamp(0.0, 1.0);
             if let Some(window) = &self.window {
                 let size = window.inner_size();
                 self.cursor = (
@@ -10184,7 +10184,7 @@ impl ApplicationHandler for Game<'_> {
                 );
             }
 
-            // 2. Key injection
+            // 2. Key injection (Movement & Menus)
             let keys = [
                 (crate::ios::KEY_W.load(Ordering::Relaxed), KeyCode::KeyW),
                 (crate::ios::KEY_A.load(Ordering::Relaxed), KeyCode::KeyA),
@@ -10206,7 +10206,25 @@ impl ApplicationHandler for Game<'_> {
                 }
             }
 
-            // 3. Mouse Click Injection
+            // 3. F3 Debug Toggle (Triggers Horizon's internal debug_key handler)
+            let f3_pressed = crate::ios::KEY_F3.load(Ordering::Relaxed);
+            if f3_pressed != crate::ios::KEY_F3_PREV.load(Ordering::Relaxed) {
+                crate::ios::KEY_F3_PREV.store(f3_pressed, Ordering::Relaxed);
+                use crate::debug_keys::KeyAction;
+                let action = if f3_pressed { KeyAction::Press } else { KeyAction::Release };
+                let _ = self.debug_key(KeyCode::F3, action);
+            }
+
+            // 4. F1 HUD Toggle
+            let f1_pressed = crate::ios::KEY_F1.load(Ordering::Relaxed);
+            if f1_pressed != crate::ios::KEY_F1_PREV.load(Ordering::Relaxed) {
+                crate::ios::KEY_F1_PREV.store(f1_pressed, Ordering::Relaxed);
+                use crate::debug_keys::KeyAction;
+                let action = if f1_pressed { KeyAction::Press } else { KeyAction::Release };
+                let _ = self.debug_key(KeyCode::F1, action);
+            }
+
+            // 5. Mouse Click Injection
             let btn_map = [
                 (MouseButton::Left, &crate::ios::MOUSE_BTN_STATE[0], &crate::ios::MOUSE_BTN_PREV[0]),
                 (MouseButton::Right, &crate::ios::MOUSE_BTN_STATE[1], &crate::ios::MOUSE_BTN_PREV[1]),

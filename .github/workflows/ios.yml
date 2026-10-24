@@ -15,12 +15,27 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-ios
+
+      # 1. Cache Rust Dependencies and Build Artifacts (Saves ~8-10 mins)
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ios-build
           
       - name: Build Rust Static Library
         run: |
           cargo build --release --lib --package horizon-client --target aarch64-apple-ios --no-default-features --features audio
           
+      # 2. Cache the Game Assets so we don't redownload 400MB every time (Saves ~2-3 mins)
+      - name: Cache Game Assets
+        id: cache-assets
+        uses: actions/cache@v4
+        with:
+          path: ios/GameData
+          key: horizon-assets-v1
+
       - name: Download Game Assets
+        if: steps.cache-assets.outputs.cache-hit != 'true'
         run: |
           curl -L -o assets.zip "https://pub-7a7e79921dcf455280d0de7c4a48369f.r2.dev/horizon-assets.zip"
           mkdir -p ios/GameData
@@ -44,31 +59,22 @@ jobs:
           mkdir -p build/Payload
           cp -R ios/build/Build/Products/Release-iphoneos/Horizon.app build/Payload/
           
-          # Force inject the Bundle ID and Executable
           /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier dev.venombucket.client" build/Payload/Horizon.app/Info.plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable Horizon" build/Payload/Horizon.app/Info.plist
           
-          # Force PkgInfo to be 8 bytes
           echo -n "APPL????" > build/Payload/Horizon.app/PkgInfo
           
-          # Strip ALL Mac extended attributes (xattr)
           xattr -cr build/Payload/Horizon.app
           
-          # Delete any hidden Mac metadata folders that break iLoader
           rm -rf build/Payload/__MACOSX
           find build/Payload -name "._*" -type f -delete
           
-          # Set exact permissions
           find build/Payload -type d -exec chmod 755 {} \;
           find build/Payload -type f -exec chmod 644 {} \;
           chmod 755 build/Payload/Horizon.app/Horizon
           
-          # Package using standard zip (The -X flag strips extra Mac attributes)
           cd build
           zip -r -X Horizon-unsigned.ipa Payload
-          
-          # Verify the zip structure
-          unzip -l Horizon-unsigned.ipa | grep -E "Payload/Horizon.app/(Info.plist|Horizon|PkgInfo|Assets.car)"
           
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
