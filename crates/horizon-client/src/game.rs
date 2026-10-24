@@ -10189,12 +10189,17 @@ impl ApplicationHandler for Game<'_> {
                 }
             }
 
+            // Dispatch a CursorMoved event directly to the game loop
             let nx = crate::ios::CURSOR_X.load(Ordering::Relaxed) as f32 / 10000.0;
             let ny = crate::ios::CURSOR_Y.load(Ordering::Relaxed) as f32 / 10000.0;
             if let Some(window) = &self.window {
                 let size = window.inner_size();
-                self.cursor_x = nx * size.width as f32;
-                self.cursor_y = ny * size.height as f32;
+                let x = (nx * size.width as f32) as f64;
+                let y = (ny * size.height as f32) as f64;
+                self.window_event(event_loop, id, WindowEvent::CursorMoved {
+                    device_id: unsafe { std::mem::transmute(1u64) },
+                    position: winit::dpi::PhysicalPosition::new(x, y),
+                });
             }
             // Inject Mouse Clicks
             let btn_map = [
