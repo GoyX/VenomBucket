@@ -10195,7 +10195,10 @@ impl ApplicationHandler for Game<'_> {
                 let was_pressed = prev.load(Ordering::Relaxed);
                 if is_pressed != was_pressed {
                     prev.store(is_pressed, Ordering::Relaxed);
-                    self.play_mouse(btn, is_pressed)?;
+                    if let Err(e) = self.play_mouse(btn, is_pressed) {
+                        self.error = Some(e);
+                        event_loop.exit();
+                    }
                 }
             }
         }
