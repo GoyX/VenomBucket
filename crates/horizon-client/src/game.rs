@@ -10169,22 +10169,19 @@ impl ApplicationHandler for Game<'_> {
         if let WindowEvent::Focused(false) = &event {
             self.physical_keys.clear();
         }
-        #[cfg(target_os = "ios")]
+                #[cfg(target_os = "ios")]
         {
             use std::sync::atomic::Ordering;
             
-            // 1. Safe Cursor Update (Clamped to prevent out-of-bounds crash)
+            // 1. Safe Cursor Update
             let nx = (crate::ios::CURSOR_X.load(Ordering::Relaxed) as f32 / 10000.0).clamp(0.0, 1.0);
             let ny = (crate::ios::CURSOR_Y.load(Ordering::Relaxed) as f32 / 10000.0).clamp(0.0, 1.0);
             if let Some(window) = &self.window {
                 let size = window.inner_size();
-                self.cursor = (
-                    nx * size.width as f32,
-                    ny * size.height as f32,
-                );
+                self.cursor = (nx * size.width as f32, ny * size.height as f32);
             }
 
-            // 2. Key injection (Movement & Menus)
+            // 2. Key injection (Calls mapped_key to trigger movement/actions)
             let keys = [
                 (crate::ios::KEY_W.load(Ordering::Relaxed), KeyCode::KeyW),
                 (crate::ios::KEY_A.load(Ordering::Relaxed), KeyCode::KeyA),
@@ -10197,34 +10194,37 @@ impl ApplicationHandler for Game<'_> {
                 (crate::ios::KEY_ESC.load(Ordering::Relaxed), KeyCode::Escape),
             ];
             for (pressed, key) in keys {
-                if pressed {
+                let was_down = self.keys.contains(&key);
+                if pressed && !was_down {
                     self.physical_keys.insert(key);
                     self.keys.insert(key);
-                } else {
+                    self.last_input = Instant::now();
+                    if let Err(e) = self.mapped_key(key, true, false) {
+                        self.error = Some(e);
+                        event_loop.exit();
+                    }
+                } else if !pressed && was_down {
                     self.physical_keys.remove(&key);
                     self.keys.remove(&key);
+                    self.last_input = Instant::now();
+                    if let Err(e) = self.mapped_key(key, false, false) {
+                        self.error = Some(e);
+                        event_loop.exit();
+                    }
                 }
             }
 
-            // 3. F3 Debug Toggle (Triggers Horizon's internal debug_key handler)
+            // 3. F3 Debug Toggle
             let f3_pressed = crate::ios::KEY_F3.load(Ordering::Relaxed);
             if f3_pressed != crate::ios::KEY_F3_PREV.load(Ordering::Relaxed) {
                 crate::ios::KEY_F3_PREV.store(f3_pressed, Ordering::Relaxed);
+                self.last_input = Instant::now();
                 use crate::debug_keys::KeyAction;
                 let action = if f3_pressed { KeyAction::Press } else { KeyAction::Release };
                 let _ = self.debug_key(KeyCode::F3, action);
             }
 
-            // 4. F1 HUD Toggle
-            let f1_pressed = crate::ios::KEY_F1.load(Ordering::Relaxed);
-            if f1_pressed != crate::ios::KEY_F1_PREV.load(Ordering::Relaxed) {
-                crate::ios::KEY_F1_PREV.store(f1_pressed, Ordering::Relaxed);
-                use crate::debug_keys::KeyAction;
-                let action = if f1_pressed { KeyAction::Press } else { KeyAction::Release };
-                let _ = self.debug_key(KeyCode::F1, action);
-            }
-
-            // 5. Mouse Click Injection
+            // 4. Mouse Click Injection
             let btn_map = [
                 (MouseButton::Left, &crate::ios::MOUSE_BTN_STATE[0], &crate::ios::MOUSE_BTN_PREV[0]),
                 (MouseButton::Right, &crate::ios::MOUSE_BTN_STATE[1], &crate::ios::MOUSE_BTN_PREV[1]),
@@ -10234,6 +10234,7 @@ impl ApplicationHandler for Game<'_> {
                 let was_pressed = prev.load(Ordering::Relaxed);
                 if is_pressed != was_pressed {
                     prev.store(is_pressed, Ordering::Relaxed);
+                    self.last_input = Instant::now();
                     if let Err(e) = self.play_mouse(btn, is_pressed) {
                         self.error = Some(e);
                         event_loop.exit();

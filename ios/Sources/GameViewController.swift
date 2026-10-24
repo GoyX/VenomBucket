@@ -20,10 +20,14 @@ class GameViewController: UIViewController {
         view.backgroundColor = .clear
         view.isMultipleTouchEnabled = true
         
-        // Add Tap Gesture for Menus
+        // Invisible view behind the buttons for menu taps
+        let tapView = UIView(frame: view.bounds)
+        tapView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        tapView.backgroundColor = .clear
+        view.addSubview(tapView)
+        
         let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
-        tap.cancelsTouchesInView = false
-        view.addGestureRecognizer(tap)
+        tapView.addGestureRecognizer(tap)
     }
     
     override func viewDidLayoutSubviews() {
@@ -90,12 +94,7 @@ class GameViewController: UIViewController {
         inv.addTarget(self, action: #selector(keyE(_:)), for: [.touchDown, .touchUpInside, .touchUpOutside])
         pause.addTarget(self, action: #selector(keyEsc(_:)), for: [.touchDown, .touchUpInside, .touchUpOutside])
         
-        // --- F1 and F3 Debug Buttons (Top Right) ---
-        let f1Btn = createButton(title: "F1", color: UIColor(white: 0.0, alpha: 0.5))
-        f1Btn.frame = CGRect(x: view.bounds.width - 115, y: 40, width: 50, height: 40)
-        f1Btn.addTarget(self, action: #selector(keyF1(_:)), for: [.touchDown, .touchUpInside, .touchUpOutside])
-        view.addSubview(f1Btn)
-
+        // --- F3 Debug Button (Top Right) ---
         let f3Btn = createButton(title: "F3", color: UIColor(white: 0.0, alpha: 0.5))
         f3Btn.frame = CGRect(x: view.bounds.width - 60, y: 40, width: 50, height: 40)
         f3Btn.addTarget(self, action: #selector(keyF3(_:)), for: [.touchDown, .touchUpInside, .touchUpOutside])
@@ -111,7 +110,6 @@ class GameViewController: UIViewController {
     @objc func keyE(_ s: UIButton) { ios_inject_key(keycode: 6, pressed: s.isHighlighted) }
     @objc func keyEsc(_ s: UIButton) { ios_inject_key(keycode: 8, pressed: s.isHighlighted) }
     @objc func keyF3(_ s: UIButton) { ios_inject_key(keycode: 9, pressed: s.isHighlighted) }
-    @objc func keyF1(_ s: UIButton) { ios_inject_key(keycode: 10, pressed: s.isHighlighted) }
     
     @objc func mouseLeft(_ s: UIButton) {
         let center = view.center
