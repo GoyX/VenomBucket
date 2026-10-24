@@ -10118,6 +10118,7 @@ impl ApplicationHandler for Game<'_> {
         let attributes = winit::platform::wayland::WindowAttributesExtWayland::with_name(
             attributes, "horizon", "horizon",
         );
+        #[allow(unused_mut)]
         let mut attrs = attributes.with_fullscreen(if cfg!(target_os = "ios") {
             Some(winit::window::Fullscreen::Borderless(None))
         } else {
@@ -10177,9 +10178,9 @@ impl ApplicationHandler for Game<'_> {
             let ny = crate::ios::CURSOR_Y.load(Ordering::Relaxed) as f32 / 10000.0;
             if let Some(window) = &self.window {
                 let size = window.inner_size();
-                self.cursor = winit::dpi::PhysicalPosition::new(
-                    (nx * size.width as f32) as f64,
-                    (ny * size.height as f32) as f64,
+                self.cursor = (
+                    nx * size.width as f32,
+                    ny * size.height as f32,
                 );
             }
 
@@ -12314,6 +12315,7 @@ impl Loading {
         let attributes = winit::platform::wayland::WindowAttributesExtWayland::with_name(
             attributes, "horizon", "horizon",
         );
+        #[allow(unused_mut)]
         let mut attrs = attributes.with_fullscreen(if cfg!(target_os = "ios") {
             Some(winit::window::Fullscreen::Borderless(None))
         } else {
