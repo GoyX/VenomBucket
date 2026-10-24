@@ -10758,7 +10758,7 @@ impl ApplicationHandler for Game<'_> {
                     self.mapped_key(key, event.state == ElementState::Pressed, event.repeat)?;
                 }
                 WindowEvent::RedrawRequested => {
-                                        #[cfg(target_os = "ios")]
+                    #[cfg(target_os = "ios")]
                     {
                         use std::sync::atomic::Ordering;
                         
@@ -10807,7 +10807,7 @@ impl ApplicationHandler for Game<'_> {
                             let _ = self.debug_key(KeyCode::F3, action);
                         }
 
-                        // 4. Mouse Click Injection (Dispatch via window_event so menus actually receive it)
+                        // 4. Mouse Click Injection
                         let btn_map = [
                             (MouseButton::Left, &crate::ios::MOUSE_BTN_STATE[0], &crate::ios::MOUSE_BTN_PREV[0]),
                             (MouseButton::Right, &crate::ios::MOUSE_BTN_STATE[1], &crate::ios::MOUSE_BTN_PREV[1]),
@@ -10819,24 +10819,37 @@ impl ApplicationHandler for Game<'_> {
                                 prev.store(is_pressed, Ordering::Relaxed);
                                 self.last_input = Instant::now();
                                 
-                                // Dispatch CursorMoved first so the UI registers the exact click position
                                 if let Some(window) = &self.window {
                                     let size = window.inner_size();
-                                    let x = (nx * size.width as f32) as f64;
-                                    let y = (ny * size.height as f32) as f64;
+                                    let scale = window.scale_factor();
+                                    let logical_size = size.to_logical::<f32>(scale);
+                                    
+                                    // Send logical coordinates to fix precision
+                                    let x = (nx * logical_size.width) as f64;
+                                    let y = (ny * logical_size.height) as f64;
+                                    
                                     self.window_event(event_loop, id, WindowEvent::CursorMoved {
                                         device_id: unsafe { std::mem::zeroed() },
-                                        position: winit::dpi::PhysicalPosition::new(x, y),
+                                        position: winit::dpi::LogicalPosition::new(x, y),
                                     });
                                 }
                                 
-                                // Dispatch the actual Mouse Click event
                                 self.window_event(event_loop, id, WindowEvent::MouseInput {
                                     device_id: unsafe { std::mem::zeroed() },
                                     state: if is_pressed { ElementState::Pressed } else { ElementState::Released },
                                     button: btn,
                                 });
                             }
+                        }
+
+                        // 5. Mouse Scroll Injection
+                        let scroll = crate::ios::SCROLL_Y.swap(0, Ordering::Relaxed);
+                        if scroll != 0 {
+                            self.window_event(event_loop, id, WindowEvent::MouseWheel {
+                                device_id: unsafe { std::mem::zeroed() },
+                                delta: winit::event::MouseScrollDelta::LineDelta(0.0, (scroll as f32) / 10.0),
+                                phase: winit::event::TouchPhase::Moved,
+                            });
                         }
                     }
                     self.observe_fullscreen();

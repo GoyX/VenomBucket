@@ -1,5 +1,6 @@
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 
+pub static SCROLL_Y: AtomicI32 = AtomicI32::new(0);
 pub static KEY_W: AtomicBool = AtomicBool::new(false);
 pub static KEY_A: AtomicBool = AtomicBool::new(false);
 pub static KEY_S: AtomicBool = AtomicBool::new(false);
@@ -71,4 +72,9 @@ pub extern "C" fn ios_inject_mouse_button(button: i32, pressed: bool) {
 pub extern "C" fn ios_inject_cursor(x: f32, y: f32) {
     CURSOR_X.store((x * 10000.0) as i32, Ordering::Relaxed);
     CURSOR_Y.store((y * 10000.0) as i32, Ordering::Relaxed);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ios_inject_scroll(dy: f32) {
+    SCROLL_Y.fetch_add((dy * 10.0) as i32, Ordering::Relaxed);
 }

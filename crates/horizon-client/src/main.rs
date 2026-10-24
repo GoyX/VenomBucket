@@ -4,6 +4,14 @@
 use horizon_client::{crash, logging};
 
 fn main() {
+    #[cfg(target_os = "ios")]
+    {
+        let home = std::env::var("HOME").unwrap_or_default();
+        let documents = std::path::PathBuf::from(home).join("Documents");
+        let _ = std::fs::create_dir_all(&documents);
+        let _ = std::env::set_current_dir(&documents);
+    }
+
     horizon_client::telemetry::mark_start();
     let args: Vec<String> = std::env::args().skip(1).collect();
     let game_args = args.iter().take_while(|a| *a != "--dedicated");
@@ -42,4 +50,8 @@ fn main() {
         std::process::exit(1);
     }
     logging::flush();
+    #[cfg(target_os = "ios")]
+    {
+        std::process::exit(0);
+    }
 }

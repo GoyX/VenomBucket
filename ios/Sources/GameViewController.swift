@@ -1,5 +1,8 @@
 import UIKit
 
+@_silgen_name("ios_inject_scroll")
+func ios_inject_scroll(dy: Float)
+
 @_silgen_name("ios_inject_key")
 func ios_inject_key(keycode: UInt32, pressed: Bool)
 
@@ -21,6 +24,7 @@ class GameViewController: UIViewController {
         view.isMultipleTouchEnabled = true
         
         // Invisible view behind the buttons for menu taps
+        
         let tapView = UIView(frame: view.bounds)
         tapView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         tapView.backgroundColor = .clear
@@ -28,6 +32,10 @@ class GameViewController: UIViewController {
         
         let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
         tapView.addGestureRecognizer(tap)
+
+        let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
+        pan.minimumNumberOfTouches = 2
+        tapView.addGestureRecognizer(pan)
     }
     
     override func viewDidLayoutSubviews() {
@@ -132,6 +140,12 @@ class GameViewController: UIViewController {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             ios_inject_mouse_button(button: 0, pressed: false)
         }
+    }
+
+    @objc func handlePan(_ sender: UIPanGestureRecognizer) {
+        let translation = sender.translation(in: view)
+        ios_inject_scroll(dy: Float(translation.y))
+        sender.setTranslation(.zero, in: view)
     }
     
     // --- Camera Look ---
