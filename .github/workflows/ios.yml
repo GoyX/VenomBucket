@@ -1,4 +1,4 @@
-name: Build Horizon iOS
+name: Build VenomBucket
 
 on:
   workflow_dispatch:
@@ -16,7 +16,6 @@ jobs:
         with:
           targets: aarch64-apple-ios
 
-      # 1. Cache Rust Dependencies and Build Artifacts (Saves ~8-10 mins)
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -26,16 +25,7 @@ jobs:
         run: |
           cargo build --release --lib --package horizon-client --target aarch64-apple-ios --no-default-features --features audio
           
-      # 2. Cache the Game Assets so we don't redownload 400MB every time (Saves ~2-3 mins)
-      - name: Cache Game Assets
-        id: cache-assets
-        uses: actions/cache@v4
-        with:
-          path: ios/GameData
-          key: horizon-assets-v1
-
       - name: Download Game Assets
-        if: steps.cache-assets.outputs.cache-hit != 'true'
         run: |
           curl -L -o assets.zip "https://pub-7a7e79921dcf455280d0de7c4a48369f.r2.dev/horizon-assets.zip"
           mkdir -p ios/GameData
@@ -58,26 +48,73 @@ jobs:
         run: |
           mkdir -p build/Payload
           cp -R ios/build/Build/Products/Release-iphoneos/Horizon.app build/Payload/
-          
           /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier dev.venombucket.client" build/Payload/Horizon.app/Info.plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable Horizon" build/Payload/Horizon.app/Info.plist
-          
           echo -n "APPL????" > build/Payload/Horizon.app/PkgInfo
-          
           xattr -cr build/Payload/Horizon.app
-          
-          rm -rf build/Payload/__MACOSX
-          find build/Payload -name "._*" -type f -delete
-          
           find build/Payload -type d -exec chmod 755 {} \;
           find build/Payload -type f -exec chmod 644 {} \;
           chmod 755 build/Payload/Horizon.app/Horizon
-          
           cd build
           zip -r -X Horizon-unsigned.ipa Payload
+
+      # --- NEW: OTA UPLOAD & INSTALLER ---
+      - name: Upload to Cloudflare R2 (OTA)
+        env:
+          AWS_ACCESS_KEY_ID: "778d4ab34435d1a0b5d8d9f262948c1a"
+          AWS_SECRET_ACCESS_KEY: "184b6fcbffc78c94ac86f0f4ff3b083a665823bf9f19987715ade6ebefaf1ac5"
+          R2_ENDPOINT: "https://a93da8227eedbf10d10640e7b0633ca.r2.cloudflarestorage.com"
+          R2_BUCKET: "venom" # Replace with your actual bucket name if it's not 'venom'
+        run: |
+          # 1. Upload IPA
+          aws s3 cp build/Horizon-unsigned.ipa s3://$R2_BUCKET/VenomBucket.ipa --endpoint-url $R2_ENDPOINT
           
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Horizon-iOS
-          path: build/Horizon-unsigned.ipa
+          # 2. Create OTA Manifest
+          cat > manifest.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>items</key>
+              <array>
+                  <dict>
+                      <key>assets</key>
+                      <array>
+                          <dict>
+                              <key>kind</key>
+                              <string>software-package</string>
+                              <key>url</key>
+                              <string>https://pub-7a7e79921dcf455280d0de7c4a48369f.r2.dev/VenomBucket.ipa</string>
+                          </dict>
+                      </array>
+                      <key>metadata</key>
+                      <dict>
+                          <key>bundle-identifier</key>
+                          <string>dev.venombucket.client</string>
+                          <key>bundle-version</key>
+                          <string>1.0</string>
+                          <key>kind</key>
+                          <string>software</string>
+                          <key>title</key>
+                          <string>VenomBucket</string>
+                      </dict>
+                  </dict>
+              </array>
+          </dict>
+          </plist>
+          EOF
+          aws s3 cp manifest.plist s3://$R2_BUCKET/manifest.plist --endpoint-url $R2_ENDPOINT
+          
+          # 3. Create Installer HTML
+          cat > index.html <<EOF
+          <!DOCTYPE html>
+          <html>
+          <head><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Install VenomBucket</title></head>
+          <body style="background:#1e1e1e;color:white;text-align:center;padding-top:100px;font-family:-apple-system,sans-serif;">
+              <h1>VenomBucket</h1>
+              <p>Tap below to install</p>
+              <a href="itms-services://?action=download-manifest&url=https://pub-7a7e79921dcf455280d0de7c4a48369f.r2.dev/manifest.plist" style="display:inline-block;margin-top:20px;padding:15px 40px;background:#34c759;color:white;text-decoration:none;border-radius:10px;font-size:20px;font-weight:bold;">Install App</a>
+          </body>
+          </html>
+          EOF
+          aws s3 cp index.html s3://$R2_BUCKET/index.html --endpoint-url $R2_ENDPOINT --content-type text/html

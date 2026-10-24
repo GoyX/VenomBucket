@@ -10822,13 +10822,14 @@ impl ApplicationHandler for Game<'_> {
                                 if let Some(window) = &self.window {
                                     let size = window.inner_size();
                                     
-                                    // Use physical size directly to match the window
-                                    let x = (nx * size.width as f32) as f64;
-                                    let y = (ny * size.height as f32) as f64;
+                                    let x = nx * size.width as f32;
+                                    let y = ny * size.height as f32;
+                                    
+                                    self.cursor = (x, y);
                                     
                                     self.window_event(event_loop, id, WindowEvent::CursorMoved {
                                         device_id: unsafe { std::mem::zeroed() },
-                                        position: winit::dpi::PhysicalPosition::new(x, y),
+                                        position: winit::dpi::PhysicalPosition::new(x as f64, y as f64),
                                     });
                                 }
                                 
