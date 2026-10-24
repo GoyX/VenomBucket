@@ -10169,79 +10169,7 @@ impl ApplicationHandler for Game<'_> {
         if let WindowEvent::Focused(false) = &event {
             self.physical_keys.clear();
         }
-                #[cfg(target_os = "ios")]
-        {
-            use std::sync::atomic::Ordering;
-            
-            // 1. Safe Cursor Update
-            let nx = (crate::ios::CURSOR_X.load(Ordering::Relaxed) as f32 / 10000.0).clamp(0.0, 1.0);
-            let ny = (crate::ios::CURSOR_Y.load(Ordering::Relaxed) as f32 / 10000.0).clamp(0.0, 1.0);
-            if let Some(window) = &self.window {
-                let size = window.inner_size();
-                self.cursor = (nx * size.width as f32, ny * size.height as f32);
-            }
-
-            // 2. Key injection (Calls mapped_key to trigger movement/actions)
-            let keys = [
-                (crate::ios::KEY_W.load(Ordering::Relaxed), KeyCode::KeyW),
-                (crate::ios::KEY_A.load(Ordering::Relaxed), KeyCode::KeyA),
-                (crate::ios::KEY_S.load(Ordering::Relaxed), KeyCode::KeyS),
-                (crate::ios::KEY_D.load(Ordering::Relaxed), KeyCode::KeyD),
-                (crate::ios::KEY_SPACE.load(Ordering::Relaxed), KeyCode::Space),
-                (crate::ios::KEY_SHIFT.load(Ordering::Relaxed), KeyCode::ShiftLeft),
-                (crate::ios::KEY_E.load(Ordering::Relaxed), KeyCode::KeyE),
-                (crate::ios::KEY_T.load(Ordering::Relaxed), KeyCode::KeyT),
-                (crate::ios::KEY_ESC.load(Ordering::Relaxed), KeyCode::Escape),
-            ];
-            for (pressed, key) in keys {
-                let was_down = self.keys.contains(&key);
-                if pressed && !was_down {
-                    self.physical_keys.insert(key);
-                    self.keys.insert(key);
-                    self.last_input = Instant::now();
-                    if let Err(e) = self.mapped_key(key, true, false) {
-                        self.error = Some(e);
-                        event_loop.exit();
-                    }
-                } else if !pressed && was_down {
-                    self.physical_keys.remove(&key);
-                    self.keys.remove(&key);
-                    self.last_input = Instant::now();
-                    if let Err(e) = self.mapped_key(key, false, false) {
-                        self.error = Some(e);
-                        event_loop.exit();
-                    }
-                }
-            }
-
-            // 3. F3 Debug Toggle
-            let f3_pressed = crate::ios::KEY_F3.load(Ordering::Relaxed);
-            if f3_pressed != crate::ios::KEY_F3_PREV.load(Ordering::Relaxed) {
-                crate::ios::KEY_F3_PREV.store(f3_pressed, Ordering::Relaxed);
-                self.last_input = Instant::now();
-                use crate::debug_keys::KeyAction;
-                let action = if f3_pressed { KeyAction::Press } else { KeyAction::Release };
-                let _ = self.debug_key(KeyCode::F3, action);
-            }
-
-            // 4. Mouse Click Injection
-            let btn_map = [
-                (MouseButton::Left, &crate::ios::MOUSE_BTN_STATE[0], &crate::ios::MOUSE_BTN_PREV[0]),
-                (MouseButton::Right, &crate::ios::MOUSE_BTN_STATE[1], &crate::ios::MOUSE_BTN_PREV[1]),
-            ];
-            for (btn, state, prev) in btn_map {
-                let is_pressed = state.load(Ordering::Relaxed);
-                let was_pressed = prev.load(Ordering::Relaxed);
-                if is_pressed != was_pressed {
-                    prev.store(is_pressed, Ordering::Relaxed);
-                    self.last_input = Instant::now();
-                    if let Err(e) = self.play_mouse(btn, is_pressed) {
-                        self.error = Some(e);
-                        event_loop.exit();
-                    }
-                }
-            }
-        }
+        
         if let WindowEvent::ModifiersChanged(m) = &event {
             self.modifiers = m.state();
         }
@@ -10830,6 +10758,70 @@ impl ApplicationHandler for Game<'_> {
                     self.mapped_key(key, event.state == ElementState::Pressed, event.repeat)?;
                 }
                 WindowEvent::RedrawRequested => {
+                    #[cfg(target_os = "ios")]
+                    {
+                        use std::sync::atomic::Ordering;
+                        
+                        // 1. Safe Cursor Update
+                        let nx = (crate::ios::CURSOR_X.load(Ordering::Relaxed) as f32 / 10000.0).clamp(0.0, 1.0);
+                        let ny = (crate::ios::CURSOR_Y.load(Ordering::Relaxed) as f32 / 10000.0).clamp(0.0, 1.0);
+                        if let Some(window) = &self.window {
+                            let size = window.inner_size();
+                            self.cursor = (nx * size.width as f32, ny * size.height as f32);
+                        }
+
+                        // 2. Key injection
+                        let keys = [
+                            (crate::ios::KEY_W.load(Ordering::Relaxed), KeyCode::KeyW),
+                            (crate::ios::KEY_A.load(Ordering::Relaxed), KeyCode::KeyA),
+                            (crate::ios::KEY_S.load(Ordering::Relaxed), KeyCode::KeyS),
+                            (crate::ios::KEY_D.load(Ordering::Relaxed), KeyCode::KeyD),
+                            (crate::ios::KEY_SPACE.load(Ordering::Relaxed), KeyCode::Space),
+                            (crate::ios::KEY_SHIFT.load(Ordering::Relaxed), KeyCode::ShiftLeft),
+                            (crate::ios::KEY_E.load(Ordering::Relaxed), KeyCode::KeyE),
+                            (crate::ios::KEY_T.load(Ordering::Relaxed), KeyCode::KeyT),
+                            (crate::ios::KEY_ESC.load(Ordering::Relaxed), KeyCode::Escape),
+                        ];
+                        for (pressed, key) in keys {
+                            let was_down = self.keys.contains(&key);
+                            if pressed && !was_down {
+                                self.physical_keys.insert(key);
+                                self.keys.insert(key);
+                                self.last_input = Instant::now();
+                                self.mapped_key(key, true, false)?;
+                            } else if !pressed && was_down {
+                                self.physical_keys.remove(&key);
+                                self.keys.remove(&key);
+                                self.last_input = Instant::now();
+                                self.mapped_key(key, false, false)?;
+                            }
+                        }
+
+                        // 3. F3 Debug Toggle
+                        let f3_pressed = crate::ios::KEY_F3.load(Ordering::Relaxed);
+                        if f3_pressed != crate::ios::KEY_F3_PREV.load(Ordering::Relaxed) {
+                            crate::ios::KEY_F3_PREV.store(f3_pressed, Ordering::Relaxed);
+                            self.last_input = Instant::now();
+                            use crate::debug_keys::KeyAction;
+                            let action = if f3_pressed { KeyAction::Press } else { KeyAction::Release };
+                            let _ = self.debug_key(KeyCode::F3, action);
+                        }
+
+                        // 4. Mouse Click Injection
+                        let btn_map = [
+                            (MouseButton::Left, &crate::ios::MOUSE_BTN_STATE[0], &crate::ios::MOUSE_BTN_PREV[0]),
+                            (MouseButton::Right, &crate::ios::MOUSE_BTN_STATE[1], &crate::ios::MOUSE_BTN_PREV[1]),
+                        ];
+                        for (btn, state, prev) in btn_map {
+                            let is_pressed = state.load(Ordering::Relaxed);
+                            let was_pressed = prev.load(Ordering::Relaxed);
+                            if is_pressed != was_pressed {
+                                prev.store(is_pressed, Ordering::Relaxed);
+                                self.last_input = Instant::now();
+                                self.play_mouse(btn, is_pressed)?;
+                            }
+                        }
+                    }
                     self.observe_fullscreen();
                     let now = Instant::now();
                     let elapsed = now.duration_since(self.previous);
