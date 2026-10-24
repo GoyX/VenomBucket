@@ -10197,7 +10197,7 @@ impl ApplicationHandler for Game<'_> {
                 let x = (nx * size.width as f32) as f64;
                 let y = (ny * size.height as f32) as f64;
                 self.window_event(event_loop, id, WindowEvent::CursorMoved {
-                    device_id: unsafe { std::mem::transmute(1u64) },
+                    device_id: unsafe { std::mem::zeroed() },
                     position: winit::dpi::PhysicalPosition::new(x, y),
                 });
             }
