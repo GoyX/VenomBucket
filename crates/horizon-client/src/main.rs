@@ -1,11 +1,7 @@
-//! Horizon: native Rust client for Minecraft Java Edition 26.3 gameplay.
-#![cfg_attr(not(target_os = "ios"), forbid(unsafe_code))]
-
-use horizon_client::{crash, logging};
-
 fn main() {
     horizon_client::telemetry::mark_start();
 
+    // FIX: Set working directory to iOS Documents before anything else
     #[cfg(target_os = "ios")]
     {
         let home = std::env::var("HOME").unwrap_or_default();
@@ -45,6 +41,7 @@ fn main() {
     
     logging::flush();
 
+    // FIX: Force iOS to exit when the game loop ends
     #[cfg(target_os = "ios")]
     {
         std::process::exit(0);

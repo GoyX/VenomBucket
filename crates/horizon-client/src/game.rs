@@ -10807,7 +10807,7 @@ impl ApplicationHandler for Game<'_> {
                             let _ = self.debug_key(KeyCode::F3, action);
                         }
 
-                        // 4. Mouse Click Injection
+                                                // 4. Mouse Click Injection
                         let btn_map = [
                             (MouseButton::Left, &crate::ios::MOUSE_BTN_STATE[0], &crate::ios::MOUSE_BTN_PREV[0]),
                             (MouseButton::Right, &crate::ios::MOUSE_BTN_STATE[1], &crate::ios::MOUSE_BTN_PREV[1]),
@@ -10821,15 +10821,18 @@ impl ApplicationHandler for Game<'_> {
                                 
                                 if let Some(window) = &self.window {
                                     let size = window.inner_size();
+                                    let scale = window.scale_factor();
                                     
-                                    let x = nx * size.width as f32;
-                                    let y = ny * size.height as f32;
-                                    
-                                    self.cursor = (x, y);
+                                    // Send LOGICAL coordinates; game.rs divides by scale internally
+                                    let logical_x = nx * (size.width as f32 / scale);
+                                    let logical_y = ny * (size.height as f32 / scale);
                                     
                                     self.window_event(event_loop, id, WindowEvent::CursorMoved {
                                         device_id: unsafe { std::mem::zeroed() },
-                                        position: winit::dpi::PhysicalPosition::new(x as f64, y as f64),
+                                        position: winit::dpi::PhysicalPosition::new(
+                                            (logical_x * scale) as f64, 
+                                            (logical_y * scale) as f64
+                                        ),
                                     });
                                 }
                                 
@@ -10840,17 +10843,6 @@ impl ApplicationHandler for Game<'_> {
                                 });
                             }
                         }
-
-                        // 5. Mouse Scroll Injection
-                        let scroll = crate::ios::SCROLL_Y.swap(0, Ordering::Relaxed);
-                        if scroll != 0 {
-                            self.window_event(event_loop, id, WindowEvent::MouseWheel {
-                                device_id: unsafe { std::mem::zeroed() },
-                                delta: winit::event::MouseScrollDelta::LineDelta(0.0, (scroll as f32) / 10.0),
-                                phase: winit::event::TouchPhase::Moved,
-                            });
-                        }
-                    }
                     self.observe_fullscreen();
                     let now = Instant::now();
                     let elapsed = now.duration_since(self.previous);
