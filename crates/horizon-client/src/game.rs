@@ -10459,7 +10459,16 @@ impl ApplicationHandler for Game<'_> {
                         self.audio.play_button_click();
                     }
                     match action {
-                        Action::Quit => event_loop.exit(),
+                        Action::Quit => {
+                            #[cfg(target_os = "ios")]
+                            {
+                                std::process::exit(0);
+                            }
+                            #[cfg(not(target_os = "ios"))]
+                            {
+                                event_loop.exit();
+                            }
+                        }
                         Action::Options => self.open_options(true),
                         Action::Accessibility => self
                             .open_options_at(true, crate::options_ui::Page::Accessibility),
@@ -10476,6 +10485,17 @@ impl ApplicationHandler for Game<'_> {
                             creative,
                             options,
                         } => {
+                            // Force absolute path on iOS so sandboxing doesn't break
+                            #[cfg(target_os = "ios")]
+                            let folder = {
+                                let home = std::env::var("HOME").unwrap_or_default();
+                                std::path::PathBuf::from(home)
+                                    .join("Documents")
+                                    .join("saves")
+                                    .join(&folder)
+                                    .to_string_lossy()
+                                    .to_string()
+                            };
                             self.open_world(&folder, Some(&name), seed, creative, Some(&options))?
                         }
                         Action::Connect { address } => {
@@ -10765,10 +10785,6 @@ impl ApplicationHandler for Game<'_> {
                         // 1. Safe Cursor Update
                         let nx = (crate::ios::CURSOR_X.load(Ordering::Relaxed) as f32 / 10000.0).clamp(0.0, 1.0);
                         let ny = (crate::ios::CURSOR_Y.load(Ordering::Relaxed) as f32 / 10000.0).clamp(0.0, 1.0);
-                        if let Some(window) = &self.window {
-                            let size = window.inner_size();
-                            self.cursor = (nx * size.width as f32, ny * size.height as f32);
-                        }
 
                         // 2. Key injection
                         let keys = [
@@ -10821,18 +10837,13 @@ impl ApplicationHandler for Game<'_> {
                                 
                                 if let Some(window) = &self.window {
                                     let size = window.inner_size();
-                                    let scale = window.scale_factor() as f32; // <-- FIX: Cast to f32
+                                    let scale = window.scale_factor() as f32;
                                     
-                                    let logical_x = nx * (size.width as f32 / scale);
-                                    let logical_y = ny * (size.height as f32 / scale);
+                                    self.cursor = (nx * size.width as f32 / scale, ny * size.height as f32 / scale);
                                     
-                                    self.window_event(event_loop, id, WindowEvent::CursorMoved {
-                                        device_id: unsafe { std::mem::zeroed() },
-                                        position: winit::dpi::PhysicalPosition::new(
-                                            (logical_x * scale) as f64, 
-                                            (logical_y * scale) as f64
-                                        ),
-                                    });
+                                    if matches!(self.screen, Screen::Inventory | Screen::Creative) {
+                                        self.inventory_drag_move();
+                                    }
                                 }
                                 
                                 self.window_event(event_loop, id, WindowEvent::MouseInput {
@@ -10854,12 +10865,11 @@ impl ApplicationHandler for Game<'_> {
                         }
                     }
                     self.observe_fullscreen();
+                    self.observe_fullscreen();
                     let now = Instant::now();
                     let elapsed = now.duration_since(self.previous);
                     self.frame_ticks = elapsed.as_secs_f32() * 20.0;
                     self.previous = now;
-                    // Arrow-key camera controls belong to gameplay; chat and
-                    // other screens use the same keys for their own navigation.
                     if self.screen == Screen::Playing
                         && self.title.is_none()
                         && self.sign_edit.is_none()

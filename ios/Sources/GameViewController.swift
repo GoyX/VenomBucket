@@ -23,19 +23,10 @@ class GameViewController: UIViewController {
         view.backgroundColor = .clear
         view.isMultipleTouchEnabled = true
         
-        // Invisible view behind the buttons for menu taps
-        
-        let tapView = UIView(frame: view.bounds)
-        tapView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        tapView.backgroundColor = .clear
-        view.addSubview(tapView)
-        
-        let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
-        tapView.addGestureRecognizer(tap)
-
         let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
         pan.minimumNumberOfTouches = 2
-        tapView.addGestureRecognizer(pan)
+        pan.cancelsTouchesInView = false
+        view.addGestureRecognizer(pan)
     }
     
     override func viewDidLayoutSubviews() {
@@ -120,6 +111,7 @@ class GameViewController: UIViewController {
     @objc func keyF3(_ s: UIButton) { ios_inject_key(keycode: 9, pressed: s.isHighlighted) }
     
     @objc func mouseLeft(_ s: UIButton) {
+        // Click center of screen to break blocks if not looking
         let center = view.center
         ios_inject_cursor(x: Float(center.x / view.bounds.width), y: Float(center.y / view.bounds.height))
         ios_inject_mouse_button(button: 0, pressed: s.isHighlighted) 
@@ -128,36 +120,33 @@ class GameViewController: UIViewController {
         ios_inject_mouse_button(button: 1, pressed: s.isHighlighted) 
     }
     
-    // --- Menu Clicks ---
-    @objc func handleTap(_ sender: UITapGestureRecognizer) {
-        let loc = sender.location(in: view)
-        let nx = Float(loc.x / view.bounds.width)
-        let ny = Float(loc.y / view.bounds.height)
-        
-        ios_inject_cursor(x: nx, y: ny)
-        ios_inject_mouse_button(button: 0, pressed: true)
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            ios_inject_mouse_button(button: 0, pressed: false)
-        }
-    }
-
     @objc func handlePan(_ sender: UIPanGestureRecognizer) {
         let translation = sender.translation(in: view)
-        ios_inject_scroll(dy: Float(translation.y))
+        ios_inject_scroll(dy: Float(-translation.y))
         sender.setTranslation(.zero, in: view)
     }
     
-    // --- Camera Look ---
+    // --- Camera & Menu Clicks ---
     var lookTouch: UITouch?
     var lastPoint: CGPoint?
+    var leftTouch: UITouch?
     
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         for touch in touches {
             let loc = touch.location(in: view)
-            if loc.x > view.bounds.width / 3 && lookTouch == nil {
-                lookTouch = touch
-                lastPoint = loc
+            if loc.x > view.bounds.width * 0.5 {
+                if lookTouch == nil {
+                    lookTouch = touch
+                    lastPoint = loc
+                }
+            } else {
+                if leftTouch == nil {
+                    leftTouch = touch
+                    let nx = Float(loc.x / view.bounds.width)
+                    let ny = Float(loc.y / view.bounds.height)
+                    ios_inject_cursor(x: nx, y: ny)
+                    ios_inject_mouse_button(button: 0, pressed: true)
+                }
             }
         }
     }
@@ -173,9 +162,15 @@ class GameViewController: UIViewController {
     }
     
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        if let touch = lookTouch, touches.contains(touch) {
-            lookTouch = nil
-            lastPoint = nil
+        for touch in touches {
+            if touch == lookTouch {
+                lookTouch = nil
+                lastPoint = nil
+            }
+            if touch == leftTouch {
+                leftTouch = nil
+                ios_inject_mouse_button(button: 0, pressed: false)
+            }
         }
     }
 }
