@@ -10821,7 +10821,7 @@ impl ApplicationHandler for Game<'_> {
                                 
                                 if let Some(window) = &self.window {
                                     let size = window.inner_size();
-                                    let scale = window.scale_factor();
+                                    let scale = window.scale_factor() as f32; // <-- FIX: Cast to f32
                                     
                                     let logical_x = nx * (size.width as f32 / scale);
                                     let logical_y = ny * (size.height as f32 / scale);
